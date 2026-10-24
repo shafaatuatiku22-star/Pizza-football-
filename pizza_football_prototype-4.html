@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pizza Football — Prototype</title>
+<style>
+:root{
+  --site-primary:#0b7a3b;
+  --site-secondary:#10233f;
+  --site-background:#07120c;
+  --site-on-primary:#ffffff;
+  --site-on-secondary:#ffffff;
+  --site-on-background:#ffffff;
+  --site-font-body:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --site-font-heading:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --site-heading-scale:1;
+  --site-spacing-scale:1;
+  --site-radius-scale:1;
+  --site-decoration-opacity:1;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:var(--site-font-body);background:var(--site-background);color:var(--site-on-background)}
+#app{min-height:100vh;background-color:var(--site-background);padding:calc(12px * var(--site-spacing-scale))}
+.header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+.logo{font-weight:900;font-size:calc(22px * var(--site-heading-scale));letter-spacing:.4px}
+.logo span{color:#7cffb0}
+.score{background:#fff;color:#07120c;border-radius:calc(14px * var(--site-radius-scale));padding:7px 12px;font-weight:900}
+.game{max-width:900px;margin:auto}
+.pitch-wrap{position:relative;border-radius:calc(20px * var(--site-radius-scale));overflow:hidden;border:2px solid rgba(255,255,255,.2);background:#176b39;box-shadow:0 14px 40px rgba(0,0,0,.35)}
+canvas{display:block;width:100%;height:auto;touch-action:none}
+.controls{display:flex;justify-content:space-between;align-items:end;gap:14px;margin-top:14px;user-select:none}
+.joy{width:132px;height:132px;border-radius:50%;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.25);position:relative;touch-action:none}
+.stick{width:56px;height:56px;border-radius:50%;background:#fff;position:absolute;left:38px;top:38px;box-shadow:0 5px 18px #0006}
+.actions{display:flex;gap:10px;align-items:end}
+.btn{width:76px;height:76px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:#fff;color:#10233f;font-weight:900;font-size:14px;box-shadow:0 8px 18px #0005;touch-action:manipulation}
+.btn:active{transform:scale(.95)}
+.btn.sprint{width:62px;height:62px;background:#ffd34d}
+.tip{margin-top:12px;text-align:center;color:#b9d9c5;font-size:13px}
+.menu{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#06140bd9;z-index:5}
+.panel{width:min(420px,90%);background:#10233f;border:1px solid #ffffff30;border-radius:20px;padding:22px;text-align:center}
+.panel h1{margin:0 0 8px;font-size:30px}.panel p{color:#c9d8e8}
+.start{border:0;border-radius:14px;padding:13px 26px;background:#7cffb0;color:#06140b;font-weight:900;font-size:16px}
+.stats{display:flex;justify-content:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.badge{background:#ffffff12;border:1px solid #ffffff18;padding:6px 10px;border-radius:10px;font-size:12px}
+@media(max-width:520px){.joy{width:112px;height:112px}.stick{left:32px;top:32px}.btn{width:68px;height:68px}.btn.sprint{width:56px;height:56px}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="game">
+    <div class="header">
+      <div class="logo">🍕 PIZZA FOOTBALL</div>
+      <div class="score" id="score">0 — 0</div>
+    </div>
+    <div class="pitch-wrap">
+      <canvas id="pitch" width="900" height="520"></canvas>
+      <div class="menu" id="menu">
+        <div class="panel">
+          <h1>FIRST MATCH</h1>
+          <p>Move your player, shoot the ball, and score!</p>
+          <div class="stats">
+            <div class="badge">Blue FC</div><div class="badge">vs</div><div class="badge">Red FC</div>
+          </div>
+          <br><button class="start" id="start">KICK OFF</button>
+        </div>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="joy" id="joy"><div class="stick" id="stick"></div></div>
+      <div class="actions">
+        <button class="btn sprint" id="sprint">RUN</button>
+        <button class="btn" id="pass">PASS</button>
+        <button class="btn" id="shoot">SHOOT</button>
+      </div>
+    </div>
+    <div class="tip">Prototype controls: joystick = move • PASS = kick • SHOOT = powerful kick • RUN = sprint</div>
+  </div>
+</div>
+<script>
+const c=document.getElementById('pitch'),ctx=c.getContext('2d');
+const W=c.width,H=c.height;
+const scoreEl=document.getElementById('score'),menu=document.getElementById('menu');
+let running=false,blueScore=0,redScore=0,last=0,goalMsg='',goalTimer=0;
+const player={x:290,y:260,r:16,vx:0,vy:0,speed:150};
+const ball={x:340,y:260,r:8,vx:0,vy:0};
+const enemy={x:600,y:260,r:16,vx:0,vy:0,speed:78};
+const keys={x:0,y:0}; let sprinting=false;
+function resetPositions(){player.x=290;player.y=260;ball.x=340;ball.y=260;ball.vx=ball.vy=0;enemy.x=600;enemy.y=260;}
+function drawPitch(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#176b39';ctx.fillRect(0,0,W,H);
+  for(let x=0;x<W;x+=100){ctx.fillStyle=x%200?'#1b7440':'#1f7b43';ctx.fillRect(x,0,100,H)}
+  ctx.strokeStyle='#ffffffcc';ctx.lineWidth=4;ctx.strokeRect(12,12,W-24,H-24);
+  ctx.beginPath();ctx.moveTo(W/2,12);ctx.lineTo(W/2,H-12);ctx.stroke();
+  ctx.beginPath();ctx.arc(W/2,H/2,78,0,Math.PI*2);ctx.stroke();
+  ctx.beginPath();ctx.arc(W/2,H/2,5,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();
+  ctx.strokeRect(12,155,105,210);ctx.strokeRect(W-117,155,105,210);
+  ctx.strokeRect(12,205,55,110);ctx.strokeRect(W-67,205,55,110);
+  ctx.fillStyle='#fff';ctx.fillRect(0,210,12,100);ctx.fillRect(W-12,210,12,100);
+  ctx.fillStyle='#ffffff22';ctx.fillRect(0,0,12,H);ctx.fillRect(W-12,0,12,H);
+}
+function circle(o,fill,label){
+  ctx.beginPath();ctx.arc(o.x,o.y,o.r,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();
+  ctx.lineWidth=2;ctx.strokeStyle='#fff';ctx.stroke();
+  if(label){ctx.fillStyle='#fff';ctx.font='bold 11px system-ui';ctx.textAlign='center';ctx.fillText(label,o.x,o.y+4)}
+}
+function render(){
+  drawPitch(); circle(player,'#2374ff','10'); circle(enemy,'#e94b4b','9'); circle(ball,'#fff','');
+  if(goalTimer>0){ctx.fillStyle='#fff';ctx.font='900 42px system-ui';ctx.textAlign='center';ctx.fillText(goalMsg,W/2,90)}
+}
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+function kick(power){
+  const d=dist(player,ball);
+  if(d<48){
+    let dx=keys.x,dy=keys.y;
+    if(Math.hypot(dx,dy)<.2){dx=1;dy=0}
+    const m=Math.hypot(dx,dy);dx/=m;dy/=m;
+    ball.vx=dx*power;ball.vy=dy*power;
+  }
+}
+function update(dt){
+  const mag=Math.hypot(keys.x,keys.y);
+  if(mag>.05){
+    const sp=player.speed*(sprinting?1.65:1);
+    player.vx=keys.x/mag*sp;player.vy=keys.y/mag*sp;
+  }else{player.vx*=.75;player.vy*=.75}
+  player.x=Math.max(28,Math.min(W-28,player.x+player.vx*dt));
+  player.y=Math.max(28,Math.min(H-28,player.y+player.vy*dt));
+  const dx=player.x-enemy.x,dy=player.y-enemy.y,d=Math.hypot(dx,dy)||1;
+  enemy.vx=dx/d*enemy.speed;enemy.vy=dy/d*enemy.speed;
+  enemy.x+=enemy.vx*dt;enemy.y+=enemy.vy*dt;
+  const bd=dist(player,ball);
+  if(bd<25){ball.x=player.x+(keys.x||1)*22;ball.y=player.y+(keys.y||0)*22}
+  ball.x+=ball.vx*dt;ball.y+=ball.vy*dt;ball.vx*=Math.pow(.05,dt);ball.vy*=Math.pow(.05,dt);
+  if(ball.y<22||ball.y>H-22){ball.y=Math.max(22,Math.min(H-22,ball.y));ball.vy*=-.7}
+  if(ball.x<0){blueScore++;goalMsg='GOAL!';goalTimer=1.5;scoreEl.textContent=blueScore+' — '+redScore;resetPositions()}
+  if(ball.x>W){redScore++;goalMsg='RED SCORES';goalTimer=1.5;scoreEl.textContent=blueScore+' — '+redScore;resetPositions()}
+  if(goalTimer>0)goalTimer-=dt;
+}
+function loop(t){const dt=Math.min(.033,(t-last)/1000||.016);last=t;if(running){update(dt);render()}requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+document.getElementById('start').onclick=()=>{menu.style.display='none';running=true;resetPositions();render()};
+document.getElementById('pass').onclick=()=>kick(260);
+document.getElementById('shoot').onclick=()=>kick(500);
+document.getElementById('sprint').onpointerdown=()=>sprinting=true;
+document.getElementById('sprint').onpointerup=()=>sprinting=false;
+document.getElementById('sprint').onpointercancel=()=>sprinting=false;
+
+const joy=document.getElementById('joy'),stick=document.getElementById('stick');
+function joyMove(e){
+  const r=joy.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
+  let dx=e.clientX-cx,dy=e.clientY-cy,max=r.width*.34,m=Math.hypot(dx,dy);
+  if(m>max){dx=dx/m*max;dy=dy/m*max}
+  stick.style.transform=`translate(${dx}px,${dy}px)`;
+  keys.x=dx/max;keys.y=dy/max;
+}
+function joyEnd(){keys.x=keys.y=0;stick.style.transform='translate(0,0)'}
+joy.addEventListener('pointerdown',e=>{joy.setPointerCapture(e.pointerId);joyMove(e)});
+joy.addEventListener('pointermove',e=>{if(e.buttons)joyMove(e)});
+joy.addEventListener('pointerup',joyEnd);joy.addEventListener('pointercancel',joyEnd);
+render();
+</script>
+</body>
+</html>
